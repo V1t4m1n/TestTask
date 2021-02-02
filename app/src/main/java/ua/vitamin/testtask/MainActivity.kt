@@ -1,66 +1,80 @@
 package ua.vitamin.testtask
 
+import android.app.Activity
+import android.content.Intent
 import android.os.Bundle
-import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
-import retrofit2.Retrofit
-import retrofit2.converter.gson.GsonConverterFactory
+import androidx.recyclerview.widget.StaggeredGridLayoutManager
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import com.unsplash.pickerandroid.photopicker.UnsplashPhotoPicker
+import com.unsplash.pickerandroid.photopicker.data.UnsplashPhoto
+import com.unsplash.pickerandroid.photopicker.presentation.UnsplashPickerActivity
 import ua.vitamin.testtask.adapter.PhotoAdapter
-import ua.vitamin.testtask.utils.api.UnsplashApi
+import ua.vitamin.testtask.utils.RequestManager
 import ua.vitamin.testtask.utils.dto.PhotoDTO
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var unsplashListImageRecyclerView: RecyclerView
+    private lateinit var swipeRefreshLayout: SwipeRefreshLayout
     private lateinit var adapter: PhotoAdapter
     private var listPhoto: List<PhotoDTO>? = null
+    private final val REQUEST_CODE = 201
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        swipeRefreshLayout = findViewById(R.id.swipeRefreshLayout)
+
+        UnsplashPhotoPicker.init(
+            application,
+            "ogn_r_XMWD2ph-AC7pnGPQEzPWKECEmotSsM93wYYKQ",
+            "hjFltfdbPzm-sBaTwbSe6EFtkY-HQQPVfa-5tbgBeDk"
+        )
+
+        startActivityForResult(
+            UnsplashPickerActivity.getStartingIntent(
+                this, // context
+                false
+            ), REQUEST_CODE
+        )
         initRecyclerView()
+
+        swipeRefreshLayout.setOnRefreshListener {
+            setListPhoto()
+            swipeRefreshLayout.isRefreshing = false
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (resultCode == Activity.RESULT_OK && requestCode == REQUEST_CODE) {
+            val photos: List<UnsplashPhoto>? = data?.getParcelableArrayListExtra(UnsplashPickerActivity.EXTRA_PHOTOS)
+            var list = RequestManager().onRequest()
+            adapter = PhotoAdapter(photos, supportFragmentManager)
+            unsplashListImageRecyclerView.adapter = adapter
+        }
     }
 
     override fun onResume() {
         super.onResume()
-        var list = onRequest()
-        Log.d("JSON_listPhoto", "${list?.get(0)?.urls?.thumb}")
-        adapter = PhotoAdapter(list)
-        unsplashListImageRecyclerView.adapter = adapter
+        setListPhoto()
     }
 
-    private fun onRequest(): List<PhotoDTO>? {
-        var list: List<PhotoDTO>? = null
-        val retrofit = Retrofit.Builder().baseUrl("https://api.unsplash.com/")
-            .addConverterFactory(GsonConverterFactory.create()).build()
-
-        val service = retrofit.create(UnsplashApi::class.java)
-        val api: Call<List<PhotoDTO>> = service.getPhoto()
-
-        api.enqueue(object : Callback<List<PhotoDTO>> {
-            override fun onResponse(call: Call<List<PhotoDTO>>, response: Response<List<PhotoDTO>>) {
-                list = response.body()
-                Log.d("JSON_LIST", "${list?.get(0)?.urls?.thumb}")
-            }
-
-            override fun onFailure(call: Call<List<PhotoDTO>>, t: Throwable) {
-                t.printStackTrace()
-                Log.d("JSONT", t.localizedMessage.toString())
-            }
-        })
-        return list
+    private fun setListPhoto() {
+        var list = RequestManager().onRequest()
+        adapter = PhotoAdapter(list, supportFragmentManager)
+        unsplashListImageRecyclerView.adapter = adapter
     }
 
     private fun initRecyclerView() {
         unsplashListImageRecyclerView = findViewById(R.id.unsplashListImageRecyclerView)
         unsplashListImageRecyclerView.hasFixedSize()
         unsplashListImageRecyclerView.layoutManager =
-            LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false)
-        unsplashListImageRecyclerView.adapter = PhotoAdapter(listOf())
+            StaggeredGridLayoutManager(3, StaggeredGridLayoutManager.VERTICAL)
+        unsplashListImageRecyclerView.adapter = PhotoAdapter(listOf(), supportFragmentManager)
     }
 }
